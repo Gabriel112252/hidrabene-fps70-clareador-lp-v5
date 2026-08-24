@@ -1682,6 +1682,59 @@
       }
       alert('Protetor Solar Facial FPS 70 Clareador' + (kit ? '\nKit: ' + kit : '') + '\n\nLink de checkout não configurado para este kit (CHECKOUT_URLS).');
     }
+
+    // ─── BACK REDIRECT ───────────────────────────────────────────────────
+    // Quem tenta sair pelo "voltar" cai na oferta do Kit Clareador em vez de
+    // sumir. Funciona no mobile (Android/iOS) e no desktop, porque o gatilho é
+    // o botão voltar — não "exit intent" de mouse, que no celular não existe.
+    //
+    // Como funciona: empilhamos uma entrada extra no histórico. O primeiro
+    // "voltar" consome essa entrada e dispara o popstate, e aí redirecionamos.
+    //
+    // Três detalhes que fazem isso funcionar de verdade:
+    //  1. Só armamos DEPOIS do primeiro gesto do usuário. O Chrome tem uma
+    //     "history manipulation intervention" que PULA entradas criadas sem
+    //     interação — é a razão nº 1 de back redirect não funcionar no Android.
+    //  2. Empilhamos uma entrada só. Reempilhar a cada popstate prende a pessoa
+    //     na página, o que quebra o botão voltar e queima a marca.
+    //  3. location.replace (e não .href) na hora de mandar pra oferta: assim a
+    //     página de oferta não vira mais uma entrada no histórico, e o "voltar"
+    //     de lá leva a pessoa embora de boa.
+    (function () {
+      var TARGET = './oferta-kit-clareador.html';
+      var ONCE_KEY = 'hb_br_fps70';   // não repete na mesma sessão
+      var armed = false;
+
+      // Respeita quem já viu a oferta nesta sessão
+      try { if (sessionStorage.getItem(ONCE_KEY)) return; } catch (e) {}
+
+      function arm() {
+        if (armed) return;
+        armed = true;
+        try { history.pushState({ hbBackRedirect: 1 }, '', location.href); } catch (e) {}
+      }
+
+      ['touchstart', 'scroll', 'click', 'keydown'].forEach(function (ev) {
+        window.addEventListener(ev, arm, { once: true, passive: true, capture: true });
+      });
+
+      window.addEventListener('popstate', function () {
+        if (!armed) return;
+        armed = false;
+        try { sessionStorage.setItem(ONCE_KEY, '1'); } catch (e) {}
+        var url;
+        try {
+          var u = new URL(TARGET, location.href);
+          new URLSearchParams(location.search).forEach(function (value, key) {
+            if (!u.searchParams.has(key)) u.searchParams.set(key, value);
+          });
+          url = u.toString();
+        } catch (e) {
+          url = TARGET;
+        }
+        location.replace(url);
+      });
+    })();
   </script>
 
 </body>
