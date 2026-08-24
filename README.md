@@ -57,9 +57,16 @@ Três detalhes no JS do voltar que fazem funcionar de verdade:
 3. **`location.replace`** (não `.href`) ao mandar pra oferta: a página de oferta não vira
    outra entrada no histórico, então o "voltar" de lá deixa a pessoa ir embora.
 
-Os dois gatilhos dividem a **mesma trava de sessão** (`sessionStorage: hb_br_fps70`): quem
-já viu a oferta de um jeito não é abordado de novo pelo outro. Tem carência de 4s pra não
-abordar quem acabou de chegar.
+**Sem trava de sessão:** a oferta reaparece toda vez que a pessoa esboça sair. Tem só uma
+carência de 4s no carregamento (pra não abordar quem acabou de chegar) e um respiro de 1,5s
+depois de fechar — sem esse respiro, quem clica no X com o mouse ainda lá em cima reabre o
+painel no primeiro tremido e acha que o botão de fechar está quebrado.
+
+Repetir sempre é seguro **porque o redirect usa `location.replace`**: a entrada da LP é
+consumida, então quem cai na oferta sai no "voltar" seguinte em vez de ricochetear de volta
+pra LP. Testado: LP → voltar → oferta → voltar → sai pra página anterior à LP. Se algum dia
+alguém trocar isso por `location.href`, a trava de sessão tem que voltar junto, senão vira
+laço e a pessoa não consegue mais sair.
 
 ### Armadilha da UTMify (não desfaça isso)
 
@@ -67,10 +74,16 @@ O script da UTMify reescreve `src`/`href` da página. Um `<iframe>` vazio no HTM
 dela a URL da **própria LP** — e o painel abria mostrando a landing page em vez da oferta.
 Por isso o iframe é criado por JS na hora de abrir, e o HTML tem só um `<div id="br-slot">`.
 
+Outra: a classe que mostra o overlay entra depois de um **reflow síncrono**, não de um
+`requestAnimationFrame`. rAF é suspenso em aba fora de foco, e o painel ficava sem a classe
+— aberto no papel, invisível na tela.
+
 ## Como testar
 
 O gatilho do voltar arma **depois do primeiro gesto**: abra, **role a página**, e só então
-volte. E ele dispara **uma vez por sessão** — pra repetir, use uma aba anônima.
+volte. O exit intent do mouse só vale a partir de 4s de página.
+
+Os dois **repetem sempre** — não precisa de aba anônima pra testar de novo.
 
 ## Pendências
 

@@ -1770,23 +1770,17 @@
     //     página de oferta não vira mais uma entrada no histórico, e o "voltar"
     //     de lá leva a pessoa embora de boa.
     //
-    // Os dois gatilhos dividem a MESMA trava de sessão: quem já viu a oferta de
-    // um jeito não é abordado de novo pelo outro.
+    // SEM trava de sessão: a oferta reaparece toda vez que a pessoa esboça sair.
+    // Isso é seguro porque o redirect usa location.replace — a entrada da LP é
+    // consumida, então quem cai na oferta consegue sair no "voltar" seguinte.
+    // Se algum dia isso virar location.href, a trava tem que voltar junto,
+    // senão a pessoa fica presa num laço entre LP e oferta.
     (function () {
-      var TARGET   = './oferta-kit-clareador.html';
-      var ONCE_KEY = 'hb_br_fps70';   // não repete na mesma sessão
-      var MIN_MS   = 4000;            // carência: não aborda quem acabou de chegar
+      var TARGET     = './oferta-kit-clareador.html';
+      var MIN_MS     = 4000;   // carência: não aborda quem acabou de chegar
+      var REOPEN_MS  = 1500;   // respiro depois de fechar (ver openOverlay)
       var armed = false;
-      var done  = false;
       var t0 = Date.now();
-
-      // Respeita quem já viu a oferta nesta sessão
-      try { if (sessionStorage.getItem(ONCE_KEY)) return; } catch (e) {}
-
-      function markSeen() {
-        done = true;
-        try { sessionStorage.setItem(ONCE_KEY, '1'); } catch (e) {}
-      }
 
       // Monta a URL da oferta repassando as UTMs da LP
       function offerUrl(extra) {
@@ -1804,7 +1798,7 @@
 
       /* ── Gatilho 1: botão voltar → página de oferta ───────────────────── */
       function arm() {
-        if (armed || done) return;
+        if (armed) return;
         armed = true;
         try { history.pushState({ hbBackRedirect: 1 }, '', location.href); } catch (e) {}
       }
@@ -1814,9 +1808,8 @@
       });
 
       window.addEventListener('popstate', function () {
-        if (!armed || done) return;
+        if (!armed) return;
         armed = false;
-        markSeen();
         location.replace(offerUrl());
       });
 
@@ -1831,21 +1824,35 @@
       if (overlay && slot && hasMouse) {
         var open = false;
         var frame = null;
+        var closedAt = 0;
 
         function openOverlay() {
-          if (open || done) return;
+          if (open) return;
           if (Date.now() - t0 < MIN_MS) return;
+          // Respiro depois de fechar: sem isso, quem clica no X com o mouse
+          // ainda lá em cima reabre o painel no primeiro tremido — parece que
+          // o botão de fechar não funciona. Não é trava de "uma vez só": a
+          // oferta volta na próxima vez que a pessoa esboçar sair.
+          if (closedAt && Date.now() - closedAt < REOPEN_MS) return;
           open = true;
-          markSeen();
           if (!frame) {
             frame = document.createElement('iframe');
             frame.title = 'Oferta: Kit Clareador Facial com desconto';
             frame.src = offerUrl({ embed: '1' });
             slot.appendChild(frame);
           }
+          // Reabrindo: o iframe é reaproveitado, então ele ainda está na
+          // rolagem de onde a pessoa parou. Volta pro topo pra que toda
+          // aparição comece no "PARABÉNS!".
+          else {
+            try { frame.contentWindow.scrollTo(0, 0); } catch (e) {}
+          }
           overlay.hidden = false;
-          // força um frame antes da classe pra transição de opacidade rodar
-          requestAnimationFrame(function () { overlay.classList.add('is-open'); });
+          // Reflow síncrono pra transição de opacidade ter um estado inicial.
+          // Antes isso era requestAnimationFrame, mas rAF é suspenso em aba
+          // fora de foco — o painel ficava sem a classe e não aparecia.
+          void overlay.offsetHeight;
+          overlay.classList.add('is-open');
           document.body.classList.add('br-locked');
           if (closeBtn) closeBtn.focus();
         }
@@ -1853,6 +1860,7 @@
         function closeOverlay() {
           if (!open) return;
           open = false;
+          closedAt = Date.now();
           overlay.classList.remove('is-open');
           document.body.classList.remove('br-locked');
           setTimeout(function () { if (!open) overlay.hidden = true; }, 240);
