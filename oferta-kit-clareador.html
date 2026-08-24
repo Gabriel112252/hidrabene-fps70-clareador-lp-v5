@@ -353,6 +353,19 @@
     @media (prefers-reduced-motion: reduce) {
       * { animation: none !important; transition: none !important; }
     }
+
+    /* ─── MODO EMBED ─────────────────────────────────
+       Quando a página é aberta dentro do overlay da LP (?embed=1), ela não é
+       mais "a página" — é um painel. Some o rodapé (a LP por trás já tem o
+       dela) e abre espaço no topo pro botão de fechar. */
+    body.is-embed .footer { display: none; }
+    body.is-embed .win { padding-top: 46px; }
+    @media (min-width: 980px) {
+      body.is-embed .win { padding-top: 56px; }
+      /* dentro do painel o espaço é estreito: mantém a leitura em coluna */
+      body.is-embed { --content-pad: 32px; }
+      body.is-embed .offer-card { max-width: 420px; }
+    }
   </style>
 
   <script
@@ -477,6 +490,12 @@
   </footer>
 
   <script>
+    // ─── Modo embed ──────────────────────────────────────────────────────
+    // A LP abre esta mesma página dentro de um overlay (iframe) no desktop.
+    // Assim a copy da oferta vive num lugar só e nunca desencontra entre as duas.
+    var IS_EMBED = new URLSearchParams(location.search).get('embed') === '1';
+    if (IS_EMBED) document.body.classList.add('is-embed');
+
     // ─── Autoplay dos vídeos só quando visíveis ──────────────────────────
     // iOS/Safari só faz autoplay inline com o vídeo muted de fato — por isso
     // forçamos a propriedade muted antes de cada play() (não basta o atributo).
@@ -520,11 +539,20 @@
     }
 
     function comprarAgora() {
-      if (CHECKOUT_URL) {
-        window.location.href = withUtms(CHECKOUT_URL);
+      if (!CHECKOUT_URL) {
+        alert('Kit Clareador Facial — oferta de R$ 69,90\n\nLink de checkout não configurado (CHECKOUT_URL).');
         return;
       }
-      alert('Kit Clareador Facial — oferta de R$ 69,90\n\nLink de checkout não configurado (CHECKOUT_URL).');
+      var dest = withUtms(CHECKOUT_URL);
+      // Dentro do overlay da LP, navegar aqui carregaria o checkout DENTRO do
+      // iframe — a pessoa pagaria numa janelinha. Manda a janela de cima.
+      try {
+        if (IS_EMBED && window.top && window.top !== window) {
+          window.top.location.href = dest;
+          return;
+        }
+      } catch (e) { /* cross-origin: cai no fallback abaixo */ }
+      window.location.href = dest;
     }
   </script>
 

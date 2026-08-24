@@ -1108,6 +1108,55 @@
       .kit-card { padding: 22px 18px 18px; }
       .offer-showcase { max-width: 460px; }
     }
+
+    /* ─── OVERLAY DO BACK REDIRECT (desktop) ─────────────────────────────
+       Quando o mouse sai pelo topo, a oferta abre como painel sobre a LP.
+       O conteúdo vem da própria oferta-kit-clareador.html num iframe, então
+       existe uma cópia só da copy. No mobile isso nunca aparece — lá o
+       gatilho é o botão voltar, que redireciona pra página inteira. */
+    .br-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(29, 29, 27, .68);
+      -webkit-backdrop-filter: blur(2px);
+      backdrop-filter: blur(2px);
+      opacity: 0;
+      transition: opacity .22s ease;
+    }
+    .br-overlay.is-open { display: flex; opacity: 1; }
+    .br-panel {
+      position: relative;
+      width: min(100%, 520px);
+      height: min(100%, 760px);
+      background: var(--white);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .38);
+      transform: translateY(10px) scale(.99);
+      transition: transform .22s ease;
+    }
+    .br-overlay.is-open .br-panel { transform: none; }
+    .br-panel #br-slot { width: 100%; height: 100%; }
+    .br-panel iframe { width: 100%; height: 100%; border: 0; display: block; }
+    .br-close {
+      position: absolute;
+      top: 12px; right: 12px;
+      z-index: 2;
+      width: 38px; height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .92);
+      color: var(--dark);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, .18);
+    }
+    .br-close svg { width: 18px; height: 18px; }
+    body.br-locked { overflow: hidden; }
   </style>
 
   <script
@@ -1563,6 +1612,20 @@
   </section>
 
   <!-- ░░ FOOTER ░░ -->
+  <!-- Overlay do back redirect (desktop). O iframe só recebe src na hora de abrir. -->
+  <div class="br-overlay" id="br-overlay" role="dialog" aria-modal="true" aria-label="Oferta especial: Kit Clareador Facial com desconto" hidden>
+    <div class="br-panel">
+      <button class="br-close" type="button" id="br-close" aria-label="Fechar oferta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <!-- O iframe é criado por JS na hora de abrir. Não deixamos um <iframe>
+           vazio aqui de propósito: o script da UTMify reescreve src/href da
+           página e, num iframe sem src, ele grava a URL da PRÓPRIA LP — o
+           painel abria mostrando a landing page em vez da oferta. -->
+      <div id="br-slot"></div>
+    </div>
+  </div>
+
   <footer class="footer" aria-label="Rodapé">
     <div class="footer-logo" aria-label="Hidrabene">
       <img src="./assets/brand/logo-hidrabene-nav.webp" alt="Hidrabene" width="280" height="47" />
@@ -1684,14 +1747,20 @@
     }
 
     // ─── BACK REDIRECT ───────────────────────────────────────────────────
-    // Quem tenta sair pelo "voltar" cai na oferta do Kit Clareador em vez de
-    // sumir. Funciona no mobile (Android/iOS) e no desktop, porque o gatilho é
-    // o botão voltar — não "exit intent" de mouse, que no celular não existe.
+    // Quem tenta sair recebe a oferta do Kit Clareador antes de ir embora.
+    // São DOIS gatilhos, porque desktop e mobile saem de jeitos diferentes:
     //
-    // Como funciona: empilhamos uma entrada extra no histórico. O primeiro
-    // "voltar" consome essa entrada e dispara o popstate, e aí redirecionamos.
+    //  • DESKTOP — mouse saindo pelo topo (rumo à aba/barra de endereço) abre a
+    //    oferta como painel sobre a LP. É sinal fraco: a pessoa pode só estar
+    //    trocando de aba. Por isso overlay (reversível), e não redirect.
+    //  • MOBILE + DESKTOP — botão voltar. Sinal forte: a pessoa está saindo
+    //    mesmo. Aí vale mandar pra página de oferta inteira.
     //
-    // Três detalhes que fazem isso funcionar de verdade:
+    // No celular não existe "tirar o mouse", então lá só o voltar dispara.
+    //
+    // Como o voltar funciona: empilhamos uma entrada extra no histórico. O
+    // primeiro "voltar" consome essa entrada e dispara o popstate, e aí
+    // redirecionamos. Três detalhes que fazem isso funcionar de verdade:
     //  1. Só armamos DEPOIS do primeiro gesto do usuário. O Chrome tem uma
     //     "history manipulation intervention" que PULA entradas criadas sem
     //     interação — é a razão nº 1 de back redirect não funcionar no Android.
@@ -1700,16 +1769,42 @@
     //  3. location.replace (e não .href) na hora de mandar pra oferta: assim a
     //     página de oferta não vira mais uma entrada no histórico, e o "voltar"
     //     de lá leva a pessoa embora de boa.
+    //
+    // Os dois gatilhos dividem a MESMA trava de sessão: quem já viu a oferta de
+    // um jeito não é abordado de novo pelo outro.
     (function () {
-      var TARGET = './oferta-kit-clareador.html';
+      var TARGET   = './oferta-kit-clareador.html';
       var ONCE_KEY = 'hb_br_fps70';   // não repete na mesma sessão
+      var MIN_MS   = 4000;            // carência: não aborda quem acabou de chegar
       var armed = false;
+      var done  = false;
+      var t0 = Date.now();
 
       // Respeita quem já viu a oferta nesta sessão
       try { if (sessionStorage.getItem(ONCE_KEY)) return; } catch (e) {}
 
+      function markSeen() {
+        done = true;
+        try { sessionStorage.setItem(ONCE_KEY, '1'); } catch (e) {}
+      }
+
+      // Monta a URL da oferta repassando as UTMs da LP
+      function offerUrl(extra) {
+        try {
+          var u = new URL(TARGET, location.href);
+          new URLSearchParams(location.search).forEach(function (value, key) {
+            if (!u.searchParams.has(key)) u.searchParams.set(key, value);
+          });
+          if (extra) Object.keys(extra).forEach(function (k) { u.searchParams.set(k, extra[k]); });
+          return u.toString();
+        } catch (e) {
+          return TARGET;
+        }
+      }
+
+      /* ── Gatilho 1: botão voltar → página de oferta ───────────────────── */
       function arm() {
-        if (armed) return;
+        if (armed || done) return;
         armed = true;
         try { history.pushState({ hbBackRedirect: 1 }, '', location.href); } catch (e) {}
       }
@@ -1719,21 +1814,61 @@
       });
 
       window.addEventListener('popstate', function () {
-        if (!armed) return;
+        if (!armed || done) return;
         armed = false;
-        try { sessionStorage.setItem(ONCE_KEY, '1'); } catch (e) {}
-        var url;
-        try {
-          var u = new URL(TARGET, location.href);
-          new URLSearchParams(location.search).forEach(function (value, key) {
-            if (!u.searchParams.has(key)) u.searchParams.set(key, value);
-          });
-          url = u.toString();
-        } catch (e) {
-          url = TARGET;
-        }
-        location.replace(url);
+        markSeen();
+        location.replace(offerUrl());
       });
+
+      /* ── Gatilho 2: mouse saindo pelo topo → overlay ──────────────────── */
+      var overlay = document.getElementById('br-overlay');
+      var slot    = document.getElementById('br-slot');
+      var closeBtn = document.getElementById('br-close');
+      // Só onde existe mouse de verdade. Em tablet/celular o "hover" é
+      // simulado e dispararia o overlay sozinho no primeiro toque.
+      var hasMouse = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+      if (overlay && slot && hasMouse) {
+        var open = false;
+        var frame = null;
+
+        function openOverlay() {
+          if (open || done) return;
+          if (Date.now() - t0 < MIN_MS) return;
+          open = true;
+          markSeen();
+          if (!frame) {
+            frame = document.createElement('iframe');
+            frame.title = 'Oferta: Kit Clareador Facial com desconto';
+            frame.src = offerUrl({ embed: '1' });
+            slot.appendChild(frame);
+          }
+          overlay.hidden = false;
+          // força um frame antes da classe pra transição de opacidade rodar
+          requestAnimationFrame(function () { overlay.classList.add('is-open'); });
+          document.body.classList.add('br-locked');
+          if (closeBtn) closeBtn.focus();
+        }
+
+        function closeOverlay() {
+          if (!open) return;
+          open = false;
+          overlay.classList.remove('is-open');
+          document.body.classList.remove('br-locked');
+          setTimeout(function () { if (!open) overlay.hidden = true; }, 240);
+        }
+
+        // mouseout com relatedTarget nulo = o ponteiro deixou a janela.
+        // clientY baixo = saiu pelo topo (aba, barra de endereço, fechar).
+        document.addEventListener('mouseout', function (e) {
+          if (e.relatedTarget || e.clientY > 8) return;
+          openOverlay();
+        });
+
+        closeBtn && closeBtn.addEventListener('click', closeOverlay);
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) closeOverlay(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeOverlay(); });
+      }
     })();
   </script>
 

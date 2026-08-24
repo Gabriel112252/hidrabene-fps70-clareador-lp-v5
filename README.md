@@ -31,11 +31,24 @@ UTMs da página pro link. Idênticos aos de produção — domínio `hidrabene.p
 
 ## Back redirect
 
-Quem tenta sair pelo **botão voltar** cai em `oferta-kit-clareador.html` (Kit Clareador
-Facial por R$ 69,90) em vez de sumir. O gatilho é o botão voltar — não "exit intent" de
-mouse, que no celular não existe. Funciona em Android, iOS e desktop.
+São **dois gatilhos**, porque desktop e mobile saem de jeitos diferentes:
 
-Três detalhes no JS de `index.html` que fazem funcionar de verdade:
+| Onde | Gatilho | O que acontece |
+|---|---|---|
+| Desktop | Mouse sai pelo topo (rumo à aba / barra de endereço) | A oferta abre como **painel sobre a LP**, com X pra fechar. A URL não muda. |
+| Desktop + mobile | Botão **voltar** | Vai pra `oferta-kit-clareador.html` (página inteira). |
+
+O critério: mouse saindo é sinal **fraco** — a pessoa pode só estar trocando de aba, e
+arrancar ela da página irrita. O voltar é sinal **forte**, aí o redirect vale e ainda te dá
+um pageview limpo pra medir. No celular não existe "tirar o mouse", então lá só o voltar
+dispara (guardado por `matchMedia('(hover: hover) and (pointer: fine)')`, senão o overlay
+abriria sozinho no primeiro toque).
+
+O overlay carrega a **própria** `oferta-kit-clareador.html` num iframe com `?embed=1`
+(que esconde o rodapé e abre espaço pro X). Ou seja: existe **uma cópia só** da copy da
+oferta — mexeu na página, mexeu no overlay junto.
+
+Três detalhes no JS do voltar que fazem funcionar de verdade:
 
 1. **Arma só depois do primeiro gesto** do usuário (touch/scroll/click/tecla). O Chrome
    tem uma *history manipulation intervention* que PULA entradas de histórico criadas
@@ -44,8 +57,20 @@ Três detalhes no JS de `index.html` que fazem funcionar de verdade:
 3. **`location.replace`** (não `.href`) ao mandar pra oferta: a página de oferta não vira
    outra entrada no histórico, então o "voltar" de lá deixa a pessoa ir embora.
 
-Dispara **uma vez por sessão** (`sessionStorage: hb_br_fps70`). As UTMs da LP são
-repassadas pra página de oferta.
+Os dois gatilhos dividem a **mesma trava de sessão** (`sessionStorage: hb_br_fps70`): quem
+já viu a oferta de um jeito não é abordado de novo pelo outro. Tem carência de 4s pra não
+abordar quem acabou de chegar.
+
+### Armadilha da UTMify (não desfaça isso)
+
+O script da UTMify reescreve `src`/`href` da página. Um `<iframe>` vazio no HTML recebia
+dela a URL da **própria LP** — e o painel abria mostrando a landing page em vez da oferta.
+Por isso o iframe é criado por JS na hora de abrir, e o HTML tem só um `<div id="br-slot">`.
+
+## Como testar
+
+O gatilho do voltar arma **depois do primeiro gesto**: abra, **role a página**, e só então
+volte. E ele dispara **uma vez por sessão** — pra repetir, use uma aba anônima.
 
 ## Pendências
 
