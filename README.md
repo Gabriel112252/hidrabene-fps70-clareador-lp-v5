@@ -87,7 +87,8 @@ Os dois **repetem sempre** — não precisa de aba anônima pra testar de novo.
 
 ## Pendências
 
-- `CHECKOUT_URL` em `oferta-kit-clareador.html` está **vazia** — precisa do link Yampi do
-  Kit Clareador com o preço de **R$ 69,90** (o link do kit na LP normal é R$ 99,90).
+- Os R$ 69,90 vêm do **cupom `PROMOKIT53`** aplicado sobre o Kit Clareador (token
+  `6AZG3M30PU`, R$ 99,90 cheio) — está no `CHECKOUT_URL` de `oferta-kit-clareador.html`.
+  Se mexerem nesse cupom lá na Yampi, o preço da página para de bater com o do checkout.
 - Os 3 vídeos em `assets/video/br/` são **provisórios** (vieram da LP do Kit Clareador).
   Trocar pelos 3 do mockup: manchas de sol, melasma, 50+ anos.

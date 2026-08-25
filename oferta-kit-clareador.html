@@ -527,9 +527,10 @@
 
     // ─── Checkout ────────────────────────────────────────────────────────
     // Link Yampi da oferta do back redirect (Kit Clareador a R$ 69,90).
-    // Precisa ser um link com ESTE preço — o link do kit na LP normal é R$ 99,90.
-    // Se o preço vier de cupom, use: '<link do kit>?promocode=CUPOM'
-    var CHECKOUT_URL = '';
+    // É o mesmo produto da LP do kit (token 6AZG3M30PU, R$ 99,90 cheio) — quem
+    // derruba pros R$ 69,90 é o cupom PROMOKIT53. Mexeu no cupom lá na Yampi,
+    // o preço desta página para de bater com o que o checkout cobra.
+    var CHECKOUT_URL = 'https://seguro.hidrabene.com.br/r/6AZG3M30PU?promocode=PROMOKIT53';
 
     // Repassa as UTMs da página atual pro link de checkout (a Yampi não herda sozinha)
     function withUtms(url) {
